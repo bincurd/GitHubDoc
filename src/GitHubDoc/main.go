@@ -13,11 +13,15 @@ const (
 
 var (
 	GitHubRepository string
+	pImage           GitHubParser.ImageParser
 	pTree            GitHubParser.TreeParser
 	pArticle         GitHubParser.ArticleParser
 )
 
 func init() {
+	pImage = GitHubParser.ImageParser{}
+	pImage.Init()
+
 	pTree = GitHubParser.TreeParser{}
 	pTree.Init()
 
@@ -40,41 +44,57 @@ func main() {
 func parse(url string) {
 	fmt.Println("Request: ", url)
 
-	content, err := GitHubParser.GetContent(url)
-	if err != nil {
-		fmt.Println("Usage: GitHubDoc <GitHub URL>")
-		return
-	}
+	if pImage.IsImage(url) {
 
-	switch {
-	case pTree.IsTree(content):
-		urls, err := pTree.Parse(content)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-		fmt.Println("Tree: ", urls)
-
-		for _, u := range urls {
-			parse(GitHubRoot + u)
-		}
-
-		return
-	case pArticle.IsArticle(content):
-		file := "C:" + url[len(GitHubRepository):] + ".html"
+		file := "C:" + url[len(GitHubRepository):]
 		dir := filepath.Dir(file)
-		fmt.Println(file, dir)
 
 		if err := os.MkdirAll(dir, 0600); err != nil {
 			fmt.Println(err.Error())
 			return
 		}
 
-		if err := pArticle.Parse(file, content); err != nil {
+		if err := GitHubParser.GetImage(pImage.Parse(url), file); err != nil {
 			fmt.Println(err.Error())
 			return
 		}
 
-		return
+	} else {
+
+		content, err := GitHubParser.GetContent(url)
+		if err != nil {
+			fmt.Println("Usage: GitHubDoc <GitHub URL>")
+			return
+		}
+
+		switch {
+		case pTree.IsTree(content):
+			urls, err := pTree.Parse(content)
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+
+			for _, u := range urls {
+				parse(GitHubRoot + u)
+			}
+
+			return
+		case pArticle.IsArticle(content):
+			file := "C:" + url[len(GitHubRepository):] + ".html"
+			dir := filepath.Dir(file)
+
+			if err := os.MkdirAll(dir, 0600); err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+
+			if err := pArticle.Parse(file, content); err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+
+			return
+		}
 	}
 }
