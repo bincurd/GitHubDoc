@@ -18,3 +18,6 @@ go install githubdoc
 
 githubdoc.exe https://github.com/astaxie/build-web-application-with-golang
 
+------------------
+
+下一步：研究GitHub的Css，争取离线的.html达到原文的效果
