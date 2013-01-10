@@ -20,4 +20,20 @@ githubdoc.exe https://github.com/astaxie/build-web-application-with-golang
 
 ------------------
 
+更新：
+
+2013-1-10
+    加入goroutine（用Go怎么能不用routine），效率得到较大提升
+
+    大家可以在 parser.go中对routines pool的大小进行设置，影响还是挺大的，在本机的环境下测试
+    routine count | time
+        4            41s
+        8            27s
+       16            17s
+
+    但没有测试在 GOMAXPROCS下的效果
+
+------------------
+
 下一步：研究GitHub的Css，争取离线的.html达到原文的效果
+        研究Go导出PDF

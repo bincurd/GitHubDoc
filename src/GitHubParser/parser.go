@@ -1,121 +1,78 @@
 package GitHubParser
 
 import (
-	"io/ioutil"
-	"strings"
+	"fmt"
+	"time"
 )
 
-type Parser struct {
-	TagHead string
-	TagTail string
-}
+var (
+	GitHubRoot       string         = "https://github.com"
+	GitHubRaw        string         = "https://raw.github.com"
+	GitHubRepository string         = ""
+	LocationRoot     string         = "C:"
+	image            *ImageParser   = NewImageParser()
+	tree             *TreeParser    = NewTreeParser()
+	article          *ArticleParser = NewArticleParser()
+	stat             int            = 0
+	pool             chan int       = make(chan int, 16)
+)
 
-/* for parse tree page
- * most of tree page has article section else
- * so check tree first
- */
-type TreeParser struct {
-	Parser
-}
+func Start(url string) {
+	GitHubRepository = url
 
-func (this *TreeParser) Init() {
-	this.TagHead = "<tbody class=\"tree-entries"
-	this.TagTail = "</tbody>"
-}
+	t := time.Now()
 
-func (this *TreeParser) IsTree(content string) bool {
-	return strings.Contains(content, this.TagHead)
-}
-
-func (this *TreeParser) Parse(content string) ([]string, error) {
-	posHead := strings.Index(content, this.TagHead)
-	posTail := strings.Index(content, this.TagTail)
-
-	if posHead < 0 || posTail < 0 {
-		return nil, &GHError{"Not GitHub tree"}
+	fire(url)
+	for stat > 0 {
+		time.Sleep(time.Duration(1) * time.Second)
 	}
 
-	tbody := content[posHead:posTail]
+	fmt.Println("Completed: ", time.Now().Sub(t))
+}
 
-	tagAH := "<td class=\"content\"><a href=\""
-	tagAT := "\" class="
-	urls := []string{}
+func fire(url string) {
+	stat++
+	go parse(url)
+}
 
-	for {
-		posAH := strings.Index(tbody, tagAH)
-		if posAH < 0 {
-			break
+func parse(url string) {
+	pool <- 1
+	fmt.Println("Request: ", url)
+
+	if image.IsImage(url) {
+
+		if err := image.Parse(url); err != nil {
+			fmt.Println("Error: ", err.Error(), url)
+			return
 		}
 
-		tbody = tbody[posAH+len(tagAH):]
+	} else {
 
-		posAT := strings.Index(tbody, tagAT)
-		if posAT < 0 {
-			break
+		content, err := GetContent(url)
+		if err != nil {
+			fmt.Println("Error: ", err.Error(), url)
+			return
 		}
 
-		urls = append(urls, tbody[:posAT])
+		switch {
+		case tree.IsTree(content):
+			urls, err := tree.Parse(content)
+			if err != nil {
+				fmt.Println("Error: ", err.Error(), url)
+				return
+			}
 
-		tbody = tbody[posAT+len(tagAT):]
-	}
-
-	if len(urls) <= 0 {
-		return nil, &GHError{"Not GitHub tree"}
-	}
-
-	return urls, nil
-}
-
-/* for parse article page
- * .md
- */
-type ArticleParser struct {
-	Parser
-}
-
-func (this *ArticleParser) Init() {
-	this.TagHead = "<article class=\"markdown-body entry-content"
-	this.TagTail = "</article>"
-}
-
-func (this *ArticleParser) IsArticle(content string) bool {
-	return strings.Contains(content, this.TagHead)
-}
-
-func (this *ArticleParser) Parse(file string, content string) error {
-	posHead := strings.Index(content, this.TagHead)
-	posTail := strings.Index(content, this.TagTail)
-
-	if posHead < 0 || posTail < 0 {
-		return &GHError{"Not GitHub .md file"}
-	}
-
-	return ioutil.WriteFile(file, []byte(content[posHead:posTail+len(this.TagTail)]), 0600)
-}
-
-/* for parse image page
- * https://github.com/astaxie/build-web-application-with-golang/blob/master/images/1.1.mac.png
- * ->
- * https://raw.github.com/astaxie/build-web-application-with-golang/master/images/1.1.cmd.png
- */
-type ImageParser struct {
-	Exts []string
-}
-
-func (this *ImageParser) Init() {
-	this.Exts = append(this.Exts, ".png")
-}
-
-func (this *ImageParser) IsImage(url string) bool {
-	for _, ext := range this.Exts {
-		if strings.LastIndex(url, ext) == (len(url) - len(ext)) {
-			return true
+			for _, u := range urls {
+				fire(GitHubRoot + u)
+			}
+		case article.IsArticle(content):
+			if err := article.Parse(url, content); err != nil {
+				fmt.Println("Error: ", err.Error(), url)
+				return
+			}
 		}
 	}
-	return false
-}
 
-func (this *ImageParser) Parse(url string) string {
-	uri := strings.Replace(url, "https://github.com/", "https://raw.github.com/", 1)
-	return strings.Replace(uri, "/blob/", "/", 1)
+	<-pool
+	stat--
 }

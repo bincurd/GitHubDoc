@@ -1,5 +1,10 @@
 package GitHubParser
 
+type Parser struct {
+	TagHead string
+	TagTail string
+}
+
 type GHError struct {
 	message string
 }
